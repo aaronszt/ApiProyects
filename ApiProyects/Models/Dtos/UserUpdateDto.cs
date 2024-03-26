@@ -1,9 +1,8 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
-namespace ApiProyects.Models
+namespace ApiProyects.Models.Dtos
 {
-    public class User
+    public class UserUpdateDto
     {
         public int Id { get; set; }
 
@@ -11,15 +10,11 @@ namespace ApiProyects.Models
 
         public string Email { get; set; }
 
-        public string Password { get; set; }
-
         public string Country { get; set; }
 
         public string City { get; set; }
 
         public string ImageUrl { get; set; }
-
-        public DateTime CreationDate { get; set; }
 
         public DateTime UpdateDate { get; set; }
     }

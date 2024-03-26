@@ -1,12 +1,9 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
-namespace ApiProyects.Models
+namespace ApiProyects.Models.Dtos
 {
-    public class User
+    public class UserCreateDto
     {
-        public int Id { get; set; }
-
         public string Name { get; set; }
 
         public string Email { get; set; }
@@ -20,7 +17,5 @@ namespace ApiProyects.Models
         public string ImageUrl { get; set; }
 
         public DateTime CreationDate { get; set; }
-
-        public DateTime UpdateDate { get; set; }
     }
 }
