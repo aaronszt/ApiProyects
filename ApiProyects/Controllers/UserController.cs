@@ -1,13 +1,17 @@
 ﻿using ApiProyects.Files;
 using ApiProyects.Models;
 using ApiProyects.Models.Dtos;
+using ApiProyects.Repository.IRepository;
 using ApiProyects.Validators;
 using AutoMapper;
 using FluentValidation.Results;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Net;
 
 namespace ApiProyects.Controllers
 {
@@ -16,53 +20,108 @@ namespace ApiProyects.Controllers
 
     public class UserController : ControllerBase
     {
-        private readonly ApplicationDBContext _db;
+        private readonly IUserRepository _userRepo;
         private readonly IMapper _mapper;
-        public UserController(ApplicationDBContext db, IMapper mapper)
+        protected ApiResponse _response;
+        public UserController(IUserRepository userRepo, IMapper mapper)
         {
-            _db = db; 
-            _mapper = mapper; 
+            _userRepo = userRepo;
+            _mapper = mapper;
+            _response = new();
         }
 
         [HttpGet]
         [ProducesResponseType(200)]
-        public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers()
+        public async Task<ActionResult<ApiResponse>> GetUsers()
         {
-            IEnumerable<User> userList = await _db.Users.ToListAsync();
-            return Ok(_mapper.Map<IEnumerable<UserDto>>(userList)); 
+            try
+            {
+                IEnumerable<User> userList = await _userRepo.GetAll();
+                _response.Result = _mapper.Map<IEnumerable<UserDto>>(userList);
+                _response.statusCode = HttpStatusCode.OK;
+                return Ok(_response); 
+            }
+            catch (Exception ex)
+            {
+                _response.IsSuccessfull = false;
+                _response.ErrorMessages = new List<string>() { ex.ToString() };
+            }
+            return _response;
         }
 
         [HttpGet("id", Name = "GetUserById")]
         [ProducesResponseType(200)]
         [ProducesResponseType(400)]
         [ProducesResponseType(404)]
-        public async Task<ActionResult<UserDto>>GetUserById(int id)
+        public async Task<ActionResult<ApiResponse>>GetUserById(int id)
         {
-            if (id == 0) return BadRequest();
+            try
+            {
+                if (id == 0)
+                {
+                    _response.statusCode = HttpStatusCode.BadRequest;
+                    _response.ErrorMessages = new List<string> { "sadasdasdsadsada" };
+                    _response.IsSuccessfull = false;
+                    return BadRequest(_response);
+                }
 
-            var user = await _db.Users.FirstOrDefaultAsync(i => i.Id == id);
-            if (user == null) return NotFound();
+                var user = await _userRepo.GetOne(i => i.Id == id);
+                if (user == null)
+                {
+                    _response.statusCode = HttpStatusCode.NotFound;
+                    _response.ErrorMessages = new List<string> { "aaa" };
+                    _response.IsSuccessfull = false;
+                    return NotFound(_response);
+                }
 
-            return Ok(_mapper.Map<UserDto>(user));
+                _response.statusCode = HttpStatusCode.OK;
+                _response.Result = _mapper.Map<UserDto>(user);
+
+                return Ok(_response);
+            }
+            catch (Exception ex)
+            {
+                _response.IsSuccessfull = false;
+                _response.ErrorMessages = new List<string> { ex.ToString() };
+            }
+            return _response;
         }
 
         [HttpPost]
         [ProducesResponseType(201)]
         [ProducesResponseType(400)]
         [ProducesResponseType(500)]
-        public async Task<ActionResult<UserDto>> CreateUser([FromBody] UserCreateDto userCreateDto)
+        public async Task<ActionResult<ApiResponse>> CreateUser([FromBody] UserCreateDto userCreateDto)
         {
-            UserCreateDtoValidator validator = new UserCreateDtoValidator();
-            ValidationResult result = validator.Validate(userCreateDto);
-            if (!result.IsValid) return BadRequest(result.Errors);
+            try
+            {
+                UserCreateDtoValidator validator = new UserCreateDtoValidator();
+                ValidationResult result = validator.Validate(userCreateDto);
+                if (!result.IsValid)
+                {
+                    var errorMessages = result.Errors.Select(error => error.ErrorMessage).ToList();
+                    _response.statusCode = HttpStatusCode.BadRequest;
+                    _response.IsSuccessfull = false;
+                    _response.ErrorMessages = errorMessages;
+                    return BadRequest(_response);        
+                };
 
-            User userModel = _mapper.Map<User>(userCreateDto);
-            userModel.CreationDate = DateTime.Now;
+                User userModel = _mapper.Map<User>(userCreateDto);
+                userModel.CreationDate = DateTime.Now;
 
-            await _db.Users.AddAsync(userModel);
-            await _db.SaveChangesAsync();
+                await _userRepo.Create(userModel);
 
-            return CreatedAtRoute("GetUserById", userModel);
+                _response.Result = userModel;
+                _response.statusCode = HttpStatusCode.Created;
+
+                return CreatedAtRoute("GetUserById", _response);
+            }
+            catch (Exception ex)
+            {
+                _response.IsSuccessfull = false;
+                _response.ErrorMessages = new List<string> { ex.ToString() };
+            }
+            return _response;
         }
 
         [HttpDelete ("{id:int}")]
@@ -71,15 +130,37 @@ namespace ApiProyects.Controllers
         [ProducesResponseType(404)]
         public async Task<IActionResult> DeleteUser(int id)
         {
-            if (id <= 0) return BadRequest();
+            try
+            {
+                if (id <= 0)
+                {
+                    _response.statusCode = HttpStatusCode.BadRequest;
+                    _response.ErrorMessages = new List<string> { "message error" };
+                    _response.IsSuccessfull = false;
+                    return BadRequest(_response);
+                }
 
-            var user = await _db.Users.FirstOrDefaultAsync(i => i.Id == id);
-            if (user == null) return NotFound();
+                var user = await _userRepo.GetOne(i => i.Id == id);
+                if (user == null)
+                {
+                    _response.statusCode = HttpStatusCode.NotFound;
+                    _response.ErrorMessages = new List<string> { "message error" };
+                    _response.IsSuccessfull = false;
+                    return NotFound(_response);
+                }
 
-            _db.Users.Remove(user);
-            await _db.SaveChangesAsync();
+                await _userRepo.Delete(user);
 
-            return NoContent();
+                _response.statusCode = HttpStatusCode.NoContent;
+
+                return Ok(_response);
+            }
+            catch (Exception ex)
+            {
+                _response.IsSuccessfull = false;
+                _response.ErrorMessages = new List<string> { ex.ToString() };
+            }
+            return BadRequest(_response);
         }
 
         [HttpPut("{id:int}")]
@@ -88,15 +169,31 @@ namespace ApiProyects.Controllers
         [ProducesResponseType(404)]
         public async Task<IActionResult> UpdateUser (int id, [FromBody] UserDto userDto)
         {
-            if (userDto == null || id != userDto.Id) return BadRequest();
+            try
+            {
+                if (userDto == null || id != userDto.Id)
+                {
+                    _response.statusCode = HttpStatusCode.BadRequest;
+                    _response.ErrorMessages = new List<string> { "error message" };
+                    _response.IsSuccessfull = false;
+                    return BadRequest(_response);
+                }
 
-            User userModel = _mapper.Map<User>(userDto);
-            userModel.UpdateDate = DateTime.Now;
+                User userModel = _mapper.Map<User>(userDto);
+                userModel.UpdateDate = DateTime.Now;
 
-            _db.Users.Update(userModel);
-            await _db.SaveChangesAsync();
+                await _userRepo.Update(userModel);
 
-            return NoContent();
+                _response.statusCode = HttpStatusCode.NoContent;
+
+                return Ok(_response);
+            }
+            catch (Exception ex)
+            {
+                _response.IsSuccessfull = false;
+                _response.ErrorMessages = new List<string> { ex.ToString() };
+            }
+            return BadRequest(_response);
         }
 
         [HttpPatch("{id:int}")]
@@ -105,24 +202,52 @@ namespace ApiProyects.Controllers
         [ProducesResponseType(404)]
         public async Task<IActionResult> UpdatePartialUser(int id, JsonPatchDocument<UserDto> patchDto)
         {
-            if (patchDto == null || id == 0) return BadRequest();
+            try
+            {
+                if (patchDto == null || id == 0)
+                {
+                    _response.statusCode = HttpStatusCode.BadRequest;
+                    _response.ErrorMessages = new List<string> { "error message" };
+                    _response.IsSuccessfull = false;
+                    return BadRequest();
+                }
 
-            var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(i => i.Id == id);
-            if (user == null) return NotFound();
+                var user = await _userRepo.GetOne(i => i.Id == id, tracked:false);
+                if (user == null)
+                {
+                    _response.statusCode = HttpStatusCode.NotFound;
+                    _response.ErrorMessages = new List<string> { "error message" };
+                    _response.IsSuccessfull = false;
+                    return NotFound(_response);
+                }
 
-            UserDto userDto = _mapper.Map<UserDto>(user);
+                UserDto userDto = _mapper.Map<UserDto>(user);
 
-            patchDto.ApplyTo(userDto, ModelState);
-            if (!ModelState.IsValid) return BadRequest();
+                patchDto.ApplyTo(userDto, ModelState);
+                if (!ModelState.IsValid)
+                {
+                    _response.statusCode = HttpStatusCode.BadRequest;
+                    _response.ErrorMessages = new List<string> { "error message" };
+                    _response.IsSuccessfull = false;
+                    return BadRequest(_response);
+                }
 
-            User userModel = _mapper.Map<User>(userDto);
+                User userModel = _mapper.Map<User>(userDto);
 
-            userModel.UpdateDate = DateTime.Now;
+                userModel.UpdateDate = DateTime.Now;
 
-            _db.Users.Update(userModel);
-            await _db.SaveChangesAsync();
+                await _userRepo.Update(userModel);
 
-            return NoContent();
+                _response.statusCode = HttpStatusCode.NoContent;
+
+                return Ok(_response);
+            }
+            catch (Exception ex)
+            {
+                _response.IsSuccessfull = false;
+                _response.ErrorMessages = new List<string> { ex.ToString() };
+            }
+            return BadRequest(_response);
         }
     }
 }
